@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from app.core.database import get_session
 from app.models.vulnerability import Vulnerability
+from app.core.connection_manager import manager
 
 router = APIRouter()
 
@@ -33,12 +34,15 @@ def read_vulnerability(id: int, session: Session = Depends(get_session)):
     return vulnerability
 
 @router.post("/", response_model=Vulnerability)
-def create_vulnerability(vulnerability: Vulnerability, session: Session = Depends(get_session)):
+async def create_vulnerability(vulnerability: Vulnerability, session: Session = Depends(get_session)):
     """
     Create a new vulnerability record in the database.
     """
     session.add(vulnerability)
     session.commit()
-    # Refresh to get the auto-generated ID and detected_at timestamp from the DB
     session.refresh(vulnerability)
+
+    # Notify all connected mobile clients about the new vulnerability
+    await manager.broadcast(f"New alert: {vulnerability.cve_id} ({vulnerability.severity})")
+
     return vulnerability

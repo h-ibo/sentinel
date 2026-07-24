@@ -22,36 +22,28 @@ def create_db_and_tables():
 def seed_data():
     """Reads the JSON file, validates data, and inserts it into the database."""
     json_path = Path("data/mock_vulnerabilities.json")
-    
-    # Check if the mock data file exists
+
     if not json_path.exists():
         logger.error(f"Data file not found at {json_path}")
         return
 
-    # Read the JSON file
     with open(json_path, "r", encoding="utf-8") as file:
         data = json.load(file)
-        
+
     logger.info(f"Found {len(data)} vulnerabilities in the JSON file. Starting insertion...")
 
-    # Open a database session
     with Session(engine) as session:
         for item in data:
             try:
-                # Pydantic validation happens here! 
-                # It checks if the item matches the Vulnerability model
                 vulnerability = Vulnerability(**item)
-                
-                # Add to the session (not saved yet)
                 session.add(vulnerability)
-                logger.info(f"Validated and queued CVE: {vulnerability.cve_id}")
+                session.commit()
+                logger.info(f"Inserted CVE: {vulnerability.cve_id}")
             except Exception as e:
-                # If a row is malformed, catch the error, log it, and continue (do not crash)
-                logger.error(f"Failed to validate/add item: {item}. Error: {e}")
-                
-        # Commit all valid rows to the database permanently
-        session.commit()
-        logger.info("Database seeding completed successfully!")
+                session.rollback()
+                logger.error(f"Failed to insert item: {item}. Error: {e}")
+
+        logger.info("Database seeding completed!")
 
 if __name__ == "__main__":
     create_db_and_tables()

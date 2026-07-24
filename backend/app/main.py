@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import vulnerabilities, ws
+from app.api import vulnerabilities, ws, auth
 
 app = FastAPI(
     title="Sentinel API",
@@ -17,6 +17,11 @@ app.include_router(
     ws.router,
     prefix="/ws",
     tags=["WebSocket"]
+)
+app.include_router(
+    auth.router,
+    prefix="/auth",
+    tags=["Authentication"]
 )
 
 @app.get("/")

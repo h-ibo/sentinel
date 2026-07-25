@@ -50,7 +50,7 @@ export default function Dashboard() {
     fetchHistory();
 
     // 2. Connect to WebSocket for live alerts
-    websocketService.connect();
+    websocketService.connect(token);
     websocketService.onMessage((message: string) => {
       setAlerts((prevAlerts) => [
         { id: `live-${Date.now()}`, text: message },

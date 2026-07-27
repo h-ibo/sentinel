@@ -1,3 +1,4 @@
+import json
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
@@ -39,6 +40,7 @@ def read_vulnerability(
         raise HTTPException(status_code=404, detail="Vulnerability not found")
     return vulnerability
 
+
 @router.post("/", response_model=Vulnerability)
 async def create_vulnerability(
     vulnerability: Vulnerability,
@@ -53,6 +55,15 @@ async def create_vulnerability(
     session.commit()
     session.refresh(vulnerability)
 
-    await manager.broadcast(f"New alert: {vulnerability.cve_id} ({vulnerability.severity})")
+    await manager.broadcast(json.dumps({
+        "id": vulnerability.id,
+        "cve_id": vulnerability.cve_id,
+        "severity": vulnerability.severity,
+        "package_name": vulnerability.package_name,
+        "affected_version": vulnerability.affected_version,
+        "fixed_version": vulnerability.fixed_version,
+        "description": vulnerability.description,
+        "detected_at": vulnerability.detected_at.isoformat(),
+    }))
 
     return vulnerability

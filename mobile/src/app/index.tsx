@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, Pressable, Modal, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, FlatList, Pressable, Modal, ScrollView, Alert as RNAlert, ActivityIndicator } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
 import websocketService from '../services/websocket';
 import { useAuth } from '@/context/AuthContext';
 
@@ -59,6 +60,7 @@ function formatFullDate(isoDate: string): string {
 export default function Dashboard() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -95,7 +97,7 @@ export default function Dashboard() {
         const parsed = JSON.parse(message);
         setAlerts((prevAlerts) => [
           {
-            id: `live-${parsed.id}`,
+            id: `live-${parsed.id || Date.now()}`,
             cve_id: parsed.cve_id,
             severity: parsed.severity,
             package_name: parsed.package_name,
@@ -112,9 +114,64 @@ export default function Dashboard() {
     });
   }, [token]);
 
+  const handleScanUpload = async () => {
+    try {
+      const pickerResult = await DocumentPicker.getDocumentAsync({
+        type: ['text/plain', '*/*'],
+      });
+
+      if (pickerResult.canceled) return;
+
+      const file = pickerResult.assets[0];
+      setIsUploading(true);
+
+      const uriResponse = await fetch(file.uri);
+      const blob = await uriResponse.blob();
+
+      const formData = new FormData();
+      formData.append('file', blob, file.name || 'requirements.txt');
+
+      const response = await fetch(`${API_URL}/scan/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        RNAlert.alert('Tarama Başlatıldı 🛡️', `Dosya sunucuya yüklendi ve kuyruğa eklendi. (Görev ID: ${data.task_id.substring(0, 8)}...)`);
+      } else {
+        RNAlert.alert('Hata', 'Dosya yüklenemedi.');
+      }
+    } catch (error: any) {
+      console.log('Upload error:', error);
+      RNAlert.alert('Hata', `Bir hata oluştu: ${error.message || error}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Sentinel Zafiyet Yönetim Paneli</Text>
+
+      {/* Yükleme Butonu ve Durum Göstergesi */}
+      <Pressable 
+        style={[styles.uploadButton, isUploading && { opacity: 0.8 }]} 
+        onPress={handleScanUpload}
+        disabled={isUploading}
+      >
+        {isUploading ? (
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={styles.uploadButtonText}> Dosya Yükleniyor ve Taranıyor...</Text>
+          </View>
+        ) : (
+          <Text style={styles.uploadButtonText}>📁 requirements.txt Yükle ve Tara</Text>
+        )}
+      </Pressable>
 
       {alerts.length === 0 ? (
         <Text style={styles.emptyText}>Şu an tespit edilen yeni bir zafiyet yok. Sistem dinleniyor...</Text>
@@ -198,6 +255,20 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', paddingTop: 80, paddingHorizontal: 20 },
   header: { fontSize: 26, fontWeight: 'bold', marginBottom: 20, color: '#1a1a1a' },
+  uploadButton: {
+    backgroundColor: '#2563eb',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  uploadingContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  uploadButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   emptyText: { fontSize: 16, color: '#666', fontStyle: 'italic', textAlign: 'center', marginTop: 40 },
   alertCard: {
     padding: 16,

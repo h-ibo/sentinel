@@ -2,8 +2,7 @@ from fastapi import FastAPI
 from app.api import vulnerabilities, ws, auth
 from app.celery_worker import test_background_task
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from app.celery_worker import test_background_task, scan_packages_with_osv
-
+from app.celery_worker import test_background_task, scan_packages_with_osv, celery_app
 app = FastAPI(
     title="Sentinel API",
     description="Vulnerability Management System Backend",
@@ -81,3 +80,28 @@ async def upload_requirements(file: UploadFile = File(...)):
         "packages": parsed_packages,
         "message": "Dosya başarıyla ayrıştırıldı ve arka planda zafiyet taraması başlatıldı!"
     }
+
+@app.get("/scan/status/{task_id}")
+async def get_scan_status(task_id: str):
+    """
+    Kullanıcının elindeki task_id ile tarama durumunu ve sonuçlarını kontrol ettiği uç nokta.
+    """
+    # Celery'den görevin güncel durumunu Redis üzerinden çekiyoruz
+    task_result = celery_app.AsyncResult(task_id)
+    
+    # task_result.state bize görevin durumunu döner: 
+    # 'PENDING' (Bekliyor), 'STARTED' (Başladı), 'SUCCESS' (Bitti), 'FAILURE' (Hata)
+    
+    response = {
+        "task_id": task_id,
+        "status": task_result.state,
+    }
+    
+    # Eğer görev başarıyla bittiyse, OSV.dev'den dönen o gerçek sonuçları da ekleyelim
+    if task_result.state == "SUCCESS":
+        response["results"] = task_result.result
+    # Eğer görevde bir hata olduysa, hatayı döndürelim
+    elif task_result.state == "FAILURE":
+        response["error"] = str(task_result.info)
+        
+    return response
